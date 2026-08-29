@@ -13,11 +13,12 @@ def Main():
     print("iniciamos la torre de Hanoi. Presiona 'q' para salir")
     while True:
         ret, frame = cam.get_frame()
-        if not ret:
+        if not ret or frame is None:
             print("error al capturar")
             break
+
         frame = renderer.draw(frame)
-        cv2.imshow("Hanoi", frame)
+        cv2.imshow("tk", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
