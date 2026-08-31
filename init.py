@@ -1,33 +1,45 @@
-from UI.Main import Window_Game
-import tkinter as tk
-import cv2
-from src.camera import CameraStream
-from UI.Base_Game import Base
+import pyvista as pv
 
+def visualizar_hanoi_fijo():
+    plotter = pv.Plotter(title="Torre de Hanoi 3D")
+    plotter.set_background("#2b2b2b")
 
-def Main():
-    cam = CameraStream(0)
-    cam.start()
+    # Cargar las mallas
+    base = pv.read("base_hanoi.stl")
+    disco1 = pv.read("disco_1_grande.stl")
+    disco2 = pv.read("disco_2_mediano.stl")
+    disco3 = pv.read("disco_3_pequeno.stl")
 
-    renderer = Base()
-    print("iniciamos la torre de Hanoi. Presiona 'q' para salir")
-    while True:
-        ret, frame = cam.get_frame()
-        if not ret or frame is None:
-            print("error al capturar")
-            break
+    # Trasladar los discos
+    disco1.translate([-65, 0, 10], inplace=True)
+    disco2.translate([-65, 0, 20], inplace=True)
+    disco3.translate([-65, 0, 30], inplace=True)
 
-        frame = renderer.draw(frame)
-        cv2.imshow("tk", frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+    # Añadir mallas a la escena
+    plotter.add_mesh(base, color="#d4a373", smooth_shading=True, show_edges=False)
+    plotter.add_mesh(disco1, color="#e63946", smooth_shading=True, show_edges=False)
+    plotter.add_mesh(disco2, color="#457b9d", smooth_shading=True, show_edges=False)
+    plotter.add_mesh(disco3, color="#2a9d8f", smooth_shading=True, show_edges=False)
 
-    cam.release()
-    cv2.destroyAllWindows()
+    # ==========================================
+    # AJUSTES DE CÁMARA PARA FIJARLA HORIZONTALMENTE
+    # ==========================================
+    plotter.add_camera_orientation_widget()
 
+    # 2. Forzar estilo de rotación esférica libre (elimina el bloqueo de los ejes)
+    plotter.enable_trackball_style()
+    # 1. Mirar la torre de frente (eje X horizontal, eje Z vertical)
+    
+    plotter.view_xz()
+    
+    # 2. Bloquear la rotación 3D del ratón (solo permite paneo y zoom)
+    
+    
+    # Opcional: Activar proyección paralela elimina la perspectiva, 
+    # haciendo que se vea como un juego 2D puro (estilo ortogonal).
+    #plotter.enable_parallel_projection()
+
+    plotter.show()
 
 if __name__ == "__main__":
-    Window_Game()
-
-
-   
+    visualizar_hanoi_fijo()
