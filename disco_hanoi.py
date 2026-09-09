@@ -18,7 +18,7 @@ class Disco_Scene:
             return None
         return pv.read(archivo)
 
-    def apilar_tres_discos(self, plotter, x_poste, z_sup=0.2):
+    def apilar_tres_discos(self, plotter, x_poste, z_sup=2):
         diccionario_discos = {}
         poste_izquierdo = []
         z_acumulado = z_sup
@@ -34,7 +34,7 @@ class Disco_Scene:
             min_x, max_x, min_y, max_y, min_z, max_z = malla_pos.bounds
             centro_x = (min_x + max_x) / 2
             centro_y = (min_y + max_y) / 2
-            altura_disco = max_z - min_z
+            altura_disco = max_z - (min_z + 5)
 
             # 2. Vector de desplazamiento exacto hacia la coordenada de destino
             dx = x_poste - centro_x
@@ -42,6 +42,7 @@ class Disco_Scene:
             dz = z_acumulado - min_z
             
             # 3. Mover la malla en un solo paso
+            print(max_z,min_z)
             malla_pos.translate((dx, dy, dz), inplace=True)
 
             # 4. Renderizar en la escena
@@ -49,10 +50,11 @@ class Disco_Scene:
                 malla_pos,
                 color=self.colores[i],
                 smooth_shading=True,
-                show_edges=True,
+                show_edges=False,
                 edge_color=(0.1, 0.08, 0.05),
-                line_width=1.2,
+                
             )
+            
 
             diccionario_discos[i] = {"malla": malla_pos, "actor": actor}
             poste_izquierdo.append(i)
