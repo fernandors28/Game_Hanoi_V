@@ -6,8 +6,9 @@ from disco_hanoi import Disco_Scene
 class HanoiScene:
     def __init__(self, potter):
         self.potter = potter
+        self.disco_agarrado_idx = None
         self.Model_Change()
-        
+    
     def Model_Change(self):
         self.potter.clear()
         self.potter.set_background("white")
@@ -49,3 +50,14 @@ class HanoiScene:
         # Desactiva el zoom con la rueda del ratón
         self.potter.wheelEvent = lambda event: None
 
+    def update_position_hand(self,x_3d, z_3d, agarrado):
+        if agarrado:
+           if self.disco_agarrado_idx is None:
+               self.disco_agarrado_idx = self.search_disk(x_3d,z_3d)
+
+            return
+    def search_disk(self, x_3d, z_3d):
+        if len(self.pegs[0]) > 0:
+            disk_top_idx = self.pegs[0][-1]
+            return disk_top_idx
+        return None
