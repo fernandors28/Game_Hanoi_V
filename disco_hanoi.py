@@ -34,7 +34,7 @@ class Disco_Scene:
             min_x, max_x, min_y, max_y, min_z, max_z = malla_pos.bounds
             centro_x = (min_x + max_x) / 2
             centro_y = (min_y + max_y) / 2
-            altura_disco = max_z - (min_z + 5)
+            altura_disco = max_z - min_z
 
             # 2. Vector de desplazamiento exacto hacia la coordenada de destino
             dx = x_poste - centro_x

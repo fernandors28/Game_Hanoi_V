@@ -1,5 +1,6 @@
 
-from PyQt6.QtWidgets import QMainWindow, QApplication
+from PyQt6.QtGui import QAction, QKeySequence
+from PyQt6.QtWidgets import QMainWindow, QApplication, QToolBar
 from pyvistaqt import QtInteractor
 from Hanoi import HanoiScene
 import sys
@@ -33,6 +34,25 @@ class Window_Game(QMainWindow):
         self.setCentralWidget(self.potter)
         self.showMaximized()
 
-        HanoiScene(self.potter)
+        self.hanoi_scene = HanoiScene(self.potter)
+
+        toolbar = QToolBar("Movimientos", self)
+        self.addToolBar(toolbar)
+
+        undo_action = QAction("⟲ Deshacer", self)
+        undo_action.setShortcut(QKeySequence.StandardKey.Undo)
+        undo_action.triggered.connect(self.hanoi_scene.undo_move)
+        toolbar.addAction(undo_action)
+
+        redo_action = QAction("⟳ Rehacer", self)
+        redo_action.setShortcut(QKeySequence.StandardKey.Redo)
+        redo_action.triggered.connect(self.hanoi_scene.redo_move)
+        toolbar.addAction(redo_action)
+
+    def closeEvent(self, event):
+        if hasattr(self, "hanoi_scene") and hasattr(self.hanoi_scene, "gestos"):
+            self.hanoi_scene.gestos.stop()
+            self.hanoi_scene._cursor_timer.stop()
+        super().closeEvent(event)
         
     
