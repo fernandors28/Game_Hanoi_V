@@ -38,9 +38,16 @@ def generar_torre_hanoi():
     # ==========================================
     # 3. CREAR LOS TRES DISCOS
     # ==========================================
-    crear_disco(25, "disco_1_grande.stl")
-    crear_disco(20, "disco_2_mediano.stl")
-    crear_disco(15, "disco_3_pequeno.stl")
+    
+    
+    crear_disco(15, "disco_6.stl")
+    crear_disco(20, "disco_5.stl")
+    crear_disco(25, "disco_4.stl")
+    crear_disco(30, "disco_3.stl")
+    crear_disco(35, "disco_2.stl")
+    crear_disco(40, "disco_1.stl")
+
+
     
     print("¡Proceso completado!")
 

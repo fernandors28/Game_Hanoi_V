@@ -9,6 +9,10 @@ class Disco_Scene:
             "#04A373",  # Disco 1 (Grande - Verde)
             "#EB3946",  # Disco 2 (Mediano - Rojo)
             "#457590",  # Disco 3 (Pequeño - Azul)
+            "#F2A65A",  # Disco 4 (Naranja)
+            "#9B59B6",  # Disco 5 (Morado)
+            "#F1C40F",  # Disco 6 (Amarillo)
+
         ]
 
     def cargar_disco(self, numero):
@@ -23,7 +27,7 @@ class Disco_Scene:
         poste_izquierdo = []
         z_acumulado = z_sup
 
-        for i in range(3):
+        for i in range(3,7):
             malla = self.cargar_disco(i + 1)
             if malla is None:
                 continue

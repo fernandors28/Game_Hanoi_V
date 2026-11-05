@@ -7,20 +7,43 @@ from disco_hanoi import Disco_Scene
 
 
 class HanoiScene:
-    def __init__(self, potter):
+    def __init__(self, potter, on_gripper_change=None, config=None):
         self.potter = potter
+        self.on_gripper_change = on_gripper_change
+        self.config = {
+            "cursor_sensitivity": 0.45,
+            "cursor_smoothing": 0.28,
+            "cursor_dead_zone": 0.08,
+            "grab_close_threshold": 0.12,
+            "grab_open_threshold": 0.16,
+            "speed": 1.0,
+        }
+        if config:
+            self.config.update(config)
         self._drag_disk_idx = None
         self._drag_source_peg = None
         self._drag_origin = None
         self._last_drag_position = None
         self._move_history = []
         self._history_index = 0
+        self.is_paused = False
         self._hand_target = None
         self._cursor_position = None
         self._hand_grabbing = False
         self._hand_drag_offset = None
         self.Model_Change()
         self._setup_hand_cursor()
+
+    def set_hand_config(self, **kwargs):
+        self.config.update(kwargs)
+        if "cursor_sensitivity" in self.config:
+            self.config["cursor_smoothing"] = self.config["cursor_sensitivity"]
+        if hasattr(self, "gestos"):
+            self.gestos.cursor_smoothing = self.config["cursor_sensitivity"] * self.config["speed"]
+            self.gestos.cursor_dead_zone = self.config["cursor_dead_zone"]
+            self.gestos.grab_close_threshold = self.config["grab_close_threshold"]
+            self.gestos.grab_open_threshold = self.config["grab_open_threshold"]
+            self.gestos.speed = self.config["speed"]
     
     def Model_Change(self):
         self.potter.clear()
@@ -72,13 +95,18 @@ class HanoiScene:
 
     def _setup_hand_cursor(self):
         xmin, xmax, ymin, ymax, zmin, zmax = self.base_mesh.bounds
-        margen_x = (xmax - xmin) * 0.25
+        margen_x = (xmax - xmin) * 0.40
         altura_poste = zmax - self.base_top_z
         self.gestos = ControlGesto(
             x_min_3d=xmin - margen_x,
             x_max_3d=xmax + margen_x,
-            z_min_3d=self.base_top_z - altura_poste * 0.15,
-            z_max_3d=zmax + altura_poste * 0.25,
+            z_min_3d=self.base_top_z - altura_poste * 0.25,
+            z_max_3d=zmax + altura_poste * 0.40,
+            cursor_smoothing=self.config["cursor_sensitivity"] * self.config["speed"],
+            cursor_dead_zone=self.config["cursor_dead_zone"],
+            grab_close_threshold=self.config["grab_close_threshold"],
+            grab_open_threshold=self.config["grab_open_threshold"],
+            speed=self.config["speed"],
         )
         self.gestos.event_mano.connect(self._set_hand_target)
 
@@ -90,7 +118,6 @@ class HanoiScene:
             name="hand_cursor",
         )
         self.hand_cursor_actor.SetVisibility(False)
-        self.potter.camera.parallel_scale *= 1.05
 
         self._cursor_timer = QTimer(self.potter)
         self._cursor_timer.setInterval(16)
@@ -99,10 +126,15 @@ class HanoiScene:
         self.gestos.start(fps=30)
 
     def _set_hand_target(self, x_3d, z_3d, agarrado):
+        if self.is_paused:
+            return
+
         cursor_y = self.base_mesh.bounds[2] - 3.0
         self._hand_target = (x_3d, cursor_y, z_3d)
         was_grabbing = self._hand_grabbing
         self._hand_grabbing = bool(agarrado)
+        if self._hand_grabbing != was_grabbing and self.on_gripper_change:
+            self.on_gripper_change(self._hand_grabbing)
         if self._cursor_position is None:
             self._cursor_position = self._hand_target
             self.hand_cursor_actor.SetPosition(*self._cursor_position)
@@ -115,22 +147,27 @@ class HanoiScene:
             self.hand_cursor_actor.SetPosition(*self._cursor_position)
             self._begin_hand_drag(x_3d, cursor_y, z_3d)
         elif was_grabbing and not self._hand_grabbing and self._drag_disk_idx is not None:
+            # Al soltar, aplicar la última posición real antes de validar el poste.
+            # Así el suavizado del cursor no deja el disco atrás si la mano va rápido.
+            self._cursor_position = self._hand_target
+            self.hand_cursor_actor.SetPosition(*self._cursor_position)
+            self._move_hand_drag(x_3d, z_3d)
             self._finish_drag()
 
     def _animate_hand_cursor(self):
-        if self._hand_target is None or self._cursor_position is None:
+        if self.is_paused or self._hand_target is None or self._cursor_position is None:
             return
 
-        smoothing = 0.22
-        self._cursor_position = tuple(
-            current + (target - current) * smoothing
-            for current, target in zip(self._cursor_position, self._hand_target)
+        smoothing = min(
+            0.9,
+            max(0.12, self.config["cursor_smoothing"] * self.config["speed"]),
         )
-        if sum(
-            (target - current) ** 2
-            for current, target in zip(self._cursor_position, self._hand_target)
-        ) < 0.01:
-            self._cursor_position = self._hand_target
+        self._cursor_position = ControlGesto._smooth_cursor_position(
+            self._cursor_position,
+            self._hand_target,
+            smoothing=smoothing,
+            dead_zone=self.config["cursor_dead_zone"],
+        )
 
         self.hand_cursor_actor.SetPosition(*self._cursor_position)
         if self._hand_grabbing and self._drag_disk_idx is not None:
@@ -205,15 +242,54 @@ class HanoiScene:
         return True
 
     def _move_hand_drag(self, x_3d, z_3d):
-        if self._hand_drag_offset is None:
+        if self._hand_drag_offset is None or self._drag_disk_idx is None:
             return
-        mesh = self.disk[self._drag_disk_idx]["malla"]
-        center_x, _, center_z = mesh.center
         target_x = x_3d + self._hand_drag_offset[0]
         target_z = z_3d + self._hand_drag_offset[1]
-        mesh.translate((target_x - center_x, 0.0, target_z - center_z), inplace=True)
+        self._move_disk_to_position(self._drag_disk_idx, target_x, target_z)
+
+    def _move_disk_to_position(self, disk_idx, target_x, target_z):
+        mesh = self.disk[disk_idx]["malla"]
+        current_x, _, current_z = mesh.center
+        bounds = mesh.bounds
+        half_width = (bounds[1] - bounds[0]) / 2
+        half_height = (bounds[5] - bounds[4]) / 2
+        base_clearance_z = self.base_top_z + half_height
+        post_top_z = self.base_mesh.bounds[5]
+        post_radius = 4.0  # Radio de los postes en base_hanoi.stl.
+
+        # Revisar el recorrido en pasos cortos para evitar saltarse un poste
+        # cuando el cursor cambia de posición rápidamente.
+        distance = max(abs(target_x - current_x), abs(target_z - current_z))
+        steps = max(1, int(distance / 3.0) + 1)
+        safe_x, safe_z = current_x, current_z
+        for step in range(1, steps + 1):
+            fraction = step / steps
+            step_x = current_x + (target_x - current_x) * fraction
+            step_z = max(
+                current_z + (target_z - current_z) * fraction,
+                base_clearance_z,
+            )
+            near_post = any(
+                abs(position_x - peg_x) < half_width + post_radius
+                for peg_x in self.peg_x_positions
+                for position_x in (safe_x, step_x)
+            )
+            collides_with_post = (
+                near_post and step_z - half_height < post_top_z + 0.5
+            )
+            if collides_with_post and abs(step_x - safe_x) > 0.01:
+                # No elevar el disco automáticamente: bloquear solo el avance
+                # horizontal hasta que la pinza lo levante por encima del poste.
+                step_x = safe_x
+            safe_x, safe_z = step_x, step_z
+
+        mesh.translate((safe_x - current_x, 0.0, safe_z - current_z), inplace=True)
 
     def _on_mouse_press(self, event):
+        if self.is_paused:
+            return
+
         if event.button() != Qt.MouseButton.LeftButton:
             self._original_mouse_press(event)
             return
@@ -224,6 +300,9 @@ class HanoiScene:
             return
 
     def _on_mouse_move(self, event):
+        if self.is_paused:
+            return
+
         if self._drag_disk_idx is None:
             self._original_mouse_move(event)
             return
@@ -235,11 +314,20 @@ class HanoiScene:
 
         dx = current_position[0] - self._last_drag_position[0]
         dz = current_position[1] - self._last_drag_position[1]
-        self.disk[self._drag_disk_idx]["malla"].translate((dx, 0.0, dz), inplace=True)
+        mesh = self.disk[self._drag_disk_idx]["malla"]
+        center_x, _, center_z = mesh.center
+        self._move_disk_to_position(
+            self._drag_disk_idx,
+            center_x + dx,
+            center_z + dz,
+        )
         self._last_drag_position = current_position
         self.potter.render()
 
     def _on_mouse_release(self, event):
+        if self.is_paused:
+            return
+
         if self._drag_disk_idx is None:
             self._original_mouse_release(event)
             return
@@ -309,7 +397,47 @@ class HanoiScene:
         # Los índices menores son discos mayores: 0=grande, 1=mediano, 2=pequeño.
         return not destination_stack or destination_stack[-1] < disk_idx
 
+    def pause(self):
+        if self.is_paused:
+            return
+
+        self.is_paused = True
+        self.gestos.timer.stop()
+        self._cursor_timer.stop()
+
+    def resume(self):
+        if not self.is_paused:
+            return
+
+        self.is_paused = False
+        self._cursor_timer.start()
+        self.gestos.start(fps=30)
+
+    def reset_game(self):
+        self._clear_drag_state()
+        self._hand_target = None
+        self._cursor_position = None
+        self._hand_grabbing = False
+        self.hand_cursor_actor.SetVisibility(False)
+        self.pegs = [[], [], []]
+        for disk_idx in sorted(self.disk):
+            self.pegs[0].append(disk_idx)
+            self._place_disk_on_peg(disk_idx, 0)
+        self._move_history.clear()
+        self._history_index = 0
+        self.potter.render()
+
+    def _clear_drag_state(self):
+        self._drag_disk_idx = None
+        self._drag_source_peg = None
+        self._drag_origin = None
+        self._last_drag_position = None
+        self._hand_drag_offset = None
+
     def undo_move(self):
+        if self.is_paused:
+            return
+
         if self._history_index == 0:
             return
 
@@ -324,6 +452,9 @@ class HanoiScene:
         self.potter.render()
 
     def redo_move(self):
+        if self.is_paused:
+            return
+
         if self._history_index >= len(self._move_history):
             return
 
